@@ -3,27 +3,38 @@ using Panier.API.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configuration Redis - AVEC GESTION D'ERREUR
-var redisConnection = builder.Configuration.GetConnectionString("Redis");
+// === CONFIGURATION REDIS ===
+// Essayer d'abord REDIS_URL (variable Railway native)
+var redisConnection = Environment.GetEnvironmentVariable("REDIS_URL");
 
-// Si vide, utiliser une valeur par défaut pour le développement
+// Si pas trouvé, essayer ConnectionStrings:Redis
 if (string.IsNullOrEmpty(redisConnection))
 {
-    Console.WriteLine("ATTENTION: ConnectionString Redis est vide ! Utilisation de localhost:6379");
+    redisConnection = builder.Configuration.GetConnectionString("Redis");
+}
+
+// Si toujours vide, valeur par défaut
+if (string.IsNullOrEmpty(redisConnection))
+{
+    Console.WriteLine("⚠️ ATTENTION: Aucune configuration Redis trouvée !");
     redisConnection = "localhost:6379";
 }
 
-Console.WriteLine($"Tentative de connexion à Redis: {redisConnection}");
+Console.WriteLine($"🔗 Connexion à Redis: {redisConnection.Substring(0, Math.Min(40, redisConnection.Length))}...");
 
 try
 {
-    builder.Services.AddSingleton<IConnectionMultiplexer>(
-        ConnectionMultiplexer.Connect(redisConnection));
-    Console.WriteLine("✓ Connexion Redis réussie");
+    var redis = ConnectionMultiplexer.Connect(redisConnection);
+    builder.Services.AddSingleton<IConnectionMultiplexer>(redis);
+    Console.WriteLine("✅ Redis connecté avec succès !");
 }
 catch (Exception ex)
 {
-    Console.WriteLine($"✗ ERREUR connexion Redis: {ex.Message}");
+    Console.WriteLine($"❌ ERREUR Redis: {ex.Message}");
+    if (ex.InnerException != null)
+    {
+        Console.WriteLine($"   Inner: {ex.InnerException.Message}");
+    }
     throw;
 }
 
@@ -47,7 +58,6 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Configuration du pipeline HTTP
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -56,13 +66,13 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors("AllowAll");
 
-// Récupération du port dynamique (pour Railway)
+// Port dynamique Railway
 var port = Environment.GetEnvironmentVariable("PORT") ?? "5001";
-Console.WriteLine($"Démarrage sur le port: {port}");
+Console.WriteLine($"🚀 Démarrage sur le port: {port}");
 
 app.Urls.Add($"http://0.0.0.0:{port}");
 
 app.MapControllers();
 
-Console.WriteLine("Application démarrée avec succès !");
+Console.WriteLine("✅ Application démarrée avec succès !");
 app.Run();
