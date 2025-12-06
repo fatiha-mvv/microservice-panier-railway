@@ -3,12 +3,29 @@ using Panier.API.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configuration Redis
-var redisConnection = builder.Configuration.GetConnectionString("Redis")
-    ?? "localhost:6379";
+// Configuration Redis - AVEC GESTION D'ERREUR
+var redisConnection = builder.Configuration.GetConnectionString("Redis");
 
-builder.Services.AddSingleton<IConnectionMultiplexer>(
-    ConnectionMultiplexer.Connect(redisConnection));
+// Si vide, utiliser une valeur par défaut pour le développement
+if (string.IsNullOrEmpty(redisConnection))
+{
+    Console.WriteLine("ATTENTION: ConnectionString Redis est vide ! Utilisation de localhost:6379");
+    redisConnection = "localhost:6379";
+}
+
+Console.WriteLine($"Tentative de connexion à Redis: {redisConnection}");
+
+try
+{
+    builder.Services.AddSingleton<IConnectionMultiplexer>(
+        ConnectionMultiplexer.Connect(redisConnection));
+    Console.WriteLine("✓ Connexion Redis réussie");
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"✗ ERREUR connexion Redis: {ex.Message}");
+    throw;
+}
 
 builder.Services.AddSingleton<RedisPanierService>();
 
@@ -17,7 +34,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// CORS (pour permettre les appels depuis le frontend)
+// CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
@@ -39,10 +56,13 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors("AllowAll");
 
-// R�cup�ration du port dynamique (pour Railway)
+// Récupération du port dynamique (pour Railway)
 var port = Environment.GetEnvironmentVariable("PORT") ?? "5001";
+Console.WriteLine($"Démarrage sur le port: {port}");
+
 app.Urls.Add($"http://0.0.0.0:{port}");
 
 app.MapControllers();
 
+Console.WriteLine("Application démarrée avec succès !");
 app.Run();
