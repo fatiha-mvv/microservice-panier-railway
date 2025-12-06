@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  panier-api:
+    build:
+      context: .
+      dockerfile: Panier.API/Dockerfile
+    container_name: panier-api-2
+    ports:
+      - "5001:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__Redis=redis:6379
+      - PORT=80
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  gateway-api:
+    build:
+      context: .
+      dockerfile: Gateway.API/Dockerfile
+    container_name: gateway-api-2
+    ports:
+      - "5000:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - Services__PanierApi=http://panier-api:80
+      - PORT=80
+    depends_on:
+      - panier-api
+
+volumes:
+  redis-data:
