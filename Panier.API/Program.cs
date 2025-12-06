@@ -4,37 +4,56 @@ using Panier.API.Services;
 var builder = WebApplication.CreateBuilder(args);
 
 // === CONFIGURATION REDIS ===
-// Essayer d'abord REDIS_URL (variable Railway native)
 var redisConnection = Environment.GetEnvironmentVariable("REDIS_URL");
 
-// Si pas trouvé, essayer ConnectionStrings:Redis
 if (string.IsNullOrEmpty(redisConnection))
 {
     redisConnection = builder.Configuration.GetConnectionString("Redis");
 }
 
-// Si toujours vide, valeur par défaut
 if (string.IsNullOrEmpty(redisConnection))
 {
-    Console.WriteLine("⚠️ ATTENTION: Aucune configuration Redis trouvée !");
+    Console.WriteLine("⚠️ ERREUR: Aucune configuration Redis trouvée !");
     redisConnection = "localhost:6379";
 }
 
-Console.WriteLine($"🔗 Connexion à Redis: {redisConnection.Substring(0, Math.Min(40, redisConnection.Length))}...");
+// Afficher l'URL (masquer le mot de passe pour sécurité)
+var safeUrl = redisConnection.Contains("@") 
+    ? redisConnection.Substring(0, redisConnection.IndexOf("@")) + "@***" 
+    : redisConnection;
+Console.WriteLine($"🔗 Tentative de connexion à Redis: {safeUrl}");
+
+// Configuration Redis avec options robustes
+var configOptions = ConfigurationOptions.Parse(redisConnection);
+configOptions.AbortOnConnectFail = false; // Ne pas crasher si Redis n'est pas prêt
+configOptions.ConnectTimeout = 10000; // 10 secondes de timeout
+configOptions.SyncTimeout = 5000;
+configOptions.ConnectRetry = 3;
 
 try
 {
-    var redis = ConnectionMultiplexer.Connect(redisConnection);
+    Console.WriteLine("⏳ Connexion à Redis en cours...");
+    var redis = ConnectionMultiplexer.Connect(configOptions);
+    
+    // Vérifier que Redis répond
+    var db = redis.GetDatabase();
+    db.Ping();
+    
     builder.Services.AddSingleton<IConnectionMultiplexer>(redis);
-    Console.WriteLine("✅ Redis connecté avec succès !");
+    Console.WriteLine("✅✅✅ Redis connecté avec SUCCÈS ! ✅✅✅");
 }
 catch (Exception ex)
 {
-    Console.WriteLine($"❌ ERREUR Redis: {ex.Message}");
+    Console.WriteLine($"❌❌❌ ERREUR de connexion Redis ❌❌❌");
+    Console.WriteLine($"Type: {ex.GetType().Name}");
+    Console.WriteLine($"Message: {ex.Message}");
+    
     if (ex.InnerException != null)
     {
-        Console.WriteLine($"   Inner: {ex.InnerException.Message}");
+        Console.WriteLine($"Inner Exception: {ex.InnerException.Message}");
     }
+    
+    Console.WriteLine($"Connection String utilisée: {safeUrl}");
     throw;
 }
 
@@ -66,13 +85,12 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors("AllowAll");
 
-// Port dynamique Railway
 var port = Environment.GetEnvironmentVariable("PORT") ?? "5001";
-Console.WriteLine($"🚀 Démarrage sur le port: {port}");
+Console.WriteLine($"🚀 Démarrage de l'application sur le port: {port}");
 
 app.Urls.Add($"http://0.0.0.0:{port}");
 
 app.MapControllers();
 
-Console.WriteLine("✅ Application démarrée avec succès !");
+Console.WriteLine("✅✅✅ Application démarrée avec SUCCÈS ! ✅✅✅");
 app.Run();
